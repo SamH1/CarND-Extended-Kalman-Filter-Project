@@ -36,12 +36,7 @@ FusionEKF::FusionEKF() {
     * Finish initializing the FusionEKF.
     * Set the process and measurement noises
   */
-  H_laser_ << 1, 0, 0, 0,
-	  0, 1, 0, 0;
 
-  ekf_.F_ = MatrixXd(4, 4); //State transition
-  ekf_.P_ = MatrixXd(4, 4);
-  ekf_.P_.fill(1.);
 
 }
 
@@ -49,10 +44,6 @@ FusionEKF::FusionEKF() {
 * Destructor.
 */
 FusionEKF::~FusionEKF() {}
-
-// prep output logfile for debugging
-string out_file_name_ = "LogFile.txt";
-std::ofstream out_file_(out_file_name_.c_str(), std::ofstream::out);
 
 void FusionEKF::ProcessMeasurement(const MeasurementPackage &measurement_pack) {
 
@@ -70,38 +61,18 @@ void FusionEKF::ProcessMeasurement(const MeasurementPackage &measurement_pack) {
     // first measurement
     cout << "EKF: " << endl;
     ekf_.x_ = VectorXd(4);
-    ekf_.x_ << 1, 1, 1, -1.75; // value is important for the RMSE (velocity selected by trial and error) 
-                          
+    ekf_.x_ << 1, 1, 1, 1;
 
     if (measurement_pack.sensor_type_ == MeasurementPackage::RADAR) {
       /**
       Convert radar from polar to cartesian coordinates and initialize state.
       */
-		double ro = measurement_pack.raw_measurements_[0];
-		double theta = measurement_pack.raw_measurements_[1];
-		ekf_.x_(0) = ro*cos(theta);
-		ekf_.x_(1) = ro*sin(theta);
-		Hj_ = tools.CalculateJacobian(ekf_.x_);
-		//out_file_ << "R (x,y)" << ekf_.x_(0) << ", " << ekf_.x_(1) << endl; // for debug
     }
-    
     else if (measurement_pack.sensor_type_ == MeasurementPackage::LASER) {
       /**
       Initialize state.
       */
-		ekf_.x_(0) = measurement_pack.raw_measurements_[0];
-		ekf_.x_(1) = measurement_pack.raw_measurements_[1];
-		//out_file_ << "L (x,y)" << ekf_.x_(0) << ", " << ekf_.x_(1) << endl; // for debug     
     }
-    
-    //initialize transition matrix
-    ekf_.F_ << 1, 0, 0.05, 0,
-		  0, 1, 0, 0.05,
-		  0, 0, 1, 0,
-		  0, 0, 0, 1;
-	
-    //update timestamp
-	  previous_timestamp_ = measurement_pack.timestamp_;
 
     // done initializing, no need to predict or update
     is_initialized_ = true;
@@ -120,35 +91,6 @@ void FusionEKF::ProcessMeasurement(const MeasurementPackage &measurement_pack) {
      * Use noise_ax = 9 and noise_ay = 9 for your Q matrix.
    */
 
-  double dt = (measurement_pack.timestamp_ - previous_timestamp_) / 1000000.0; // dt - expressed in seconds
-  //out_file_ << "t1 " << measurement_pack.timestamp_ << endl;
-  //out_file_ << "t0 " << previous_timestamp_ << endl;
-  out_file_ << "dt " << dt << endl;
-  
-  previous_timestamp_ = measurement_pack.timestamp_;
-
-  double dt_2 = dt * dt;
-  double dt_3 = dt_2 * dt;
-  double dt_4 = dt_3 * dt;
-
-  //set the acceleration noise components
-  double noise_ax = 9; 
-  double noise_ay = 9;
-  double noise_ax2 = noise_ax * noise_ax;
-  double noise_ay2 = noise_ay * noise_ay;
-
-  // Modify the  F matrix so that the time is integrated (Section 8)
-  ekf_.F_(0, 2) = dt;
-  ekf_.F_(1, 3) = dt;
-
-  //set the proccess covariance matrix Q (Section 9)
-  ekf_.Q_ = MatrixXd(4, 4);
-  ekf_.Q_.fill(0.);
-  ekf_.Q_ << dt_4 * noise_ax2 / 4, 0, dt_3 * noise_ax2 / 2, 0,
-	  0, dt_4 * noise_ay2 / 4, 0, dt_3 * noise_ay2 / 2,
-	  dt_3 * noise_ax2 / 2, 0, dt_2 * noise_ax2, 0,
-	  0, dt_3 * noise_ay2 / 2, 0, dt_2 * noise_ay2;
-
   ekf_.Predict();
 
   /*****************************************************************************
@@ -163,24 +105,11 @@ void FusionEKF::ProcessMeasurement(const MeasurementPackage &measurement_pack) {
 
   if (measurement_pack.sensor_type_ == MeasurementPackage::RADAR) {
     // Radar updates
-    Hj_ = tools.CalculateJacobian(ekf_.x_);
-	  ekf_.H_ = Hj_;
-	  ekf_.R_ = R_radar_;
-
-	  ekf_.UpdateEKF(measurement_pack.raw_measurements_);
-
   } else {
     // Laser updates
-    ekf_.H_ = H_laser_;
-	  ekf_.R_ = R_laser_;
-
-	  ekf_.Update(measurement_pack.raw_measurements_);
   }
 
   // print the output
   cout << "x_ = " << ekf_.x_ << endl;
   cout << "P_ = " << ekf_.P_ << endl;
-  //out_file_ << "Q_ = " << ekf_.Q_ << endl;
-  //out_file_ << "F_ = " << ekf_.F_ << endl;
-  //out_file_ << "-------------------------------------" << endl;
 }
